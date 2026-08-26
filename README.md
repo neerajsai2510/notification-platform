@@ -20,37 +20,36 @@ The system accepts notification requests through a REST API, stores them in Post
                          ┌──────────────────────┐
                          │       FastAPI        │
                          │       :8000          │
-                         └───────┬───────┬──────┘
-                                 │       │
-                            SQLAlchemy   │
-                                 │       │
-                                 ▼       ▼
+                         └───────┬────────┬─────┘
+                                 │        │
+                            SQLAlchemy    │
+                                 │        │
+                                 ▼        ▼
                          ┌──────────┐  ┌──────────┐
                          │PostgreSQL│  │  Redis   │
                          │  :5432   │  │  :6379   │
-                         └──────────┘  └────┬─────┘
+                         └──────────┘  └─────┬────┘
+                                            │
+                                      Celery Broker
+                                            │
+                                            ▼
+                                   ┌────────────────┐
+                                   │ Celery Worker  │
+                                   │ Async Delivery │
+                                   └───────┬────────┘
                                            │
-                              Celery Broker │
+                                    Redis Pub/Sub
                                            │
                                            ▼
-                                  ┌────────────────┐
-                                  │ Celery Worker  │
-                                  │                │
-                                  │ Async Delivery │
-                                  └───────┬────────┘
-                                          │
-                                   Redis Pub/Sub
-                                          │
-                                          ▼
-                                  ┌────────────────┐
-                                  │    FastAPI     │
-                                  │ Redis Listener │
-                                  └───────┬────────┘
-                                          │
-                                      WebSocket
-                                          │
-                                          ▼
-                                     React UI
+                                   ┌────────────────┐
+                                   │    FastAPI     │
+                                   │ Redis Listener │
+                                   └───────┬────────┘
+                                           │
+                                       WebSocket
+                                           │
+                                           ▼
+                                      React UI
 ```
 
 ## Notification Lifecycle
@@ -78,11 +77,9 @@ PROCESSING
    │
    ▼
 DELIVERED
-
-If the maximum retry count is reached:
-
-FAILED → PERMANENT FAILED
 ```
+
+If the maximum retry count is reached, the notification remains permanently `FAILED`.
 
 ## Features
 
@@ -91,7 +88,7 @@ FAILED → PERMANENT FAILED
 - Asynchronous processing using Celery
 - Redis message broker
 - Retry mechanism with exponential backoff
-- Permanent FAILED state after maximum retries
+- Permanent `FAILED` state after maximum retries
 - Retry count tracking
 - Redis Pub/Sub for status events
 - WebSocket-based real-time dashboard updates
@@ -100,32 +97,40 @@ FAILED → PERMANENT FAILED
 - Docker Compose deployment
 - Automated tests with pytest
 
-
 ## Tech Stack
 
 ### Backend
+
 - Python
 - FastAPI
 - SQLAlchemy
 - PostgreSQL
 
 ### Asynchronous Processing
+
 - Celery
 - Redis
 
 ### Frontend
+
 - React
 - Vite
 - Tailwind CSS
 - WebSockets
 
 ### Infrastructure
+
 - Docker
 - Docker Compose
 
 ### Testing
+
 - pytest
 - HTTPX
+
+## Project Structure
+
+```text
 notification-platform/
 │
 ├── backend/
@@ -153,50 +158,84 @@ notification-platform/
 ├── .gitignore
 ├── .env.example
 └── README.md
+```
+
 ## API
 
 ### Create Notification
 
-POST /notifications
+`POST /notifications`
+
+```json
 {
   "recipient": "user123",
   "message": "Your order has shipped!"
 }
+```
+
 ### Get Notifications
 
-GET /notifications
+`GET /notifications`
+
 ### WebSocket
 
-/ws/notifications
+`ws://localhost:8000/ws/notifications`
+
+The WebSocket streams notification status changes to connected clients.
+
+## Retry Strategy
+
+Failed notifications use exponential backoff:
+
+```text
+Retry 1 → 2 seconds
+Retry 2 → 4 seconds
+Retry 3 → 8 seconds
+```
+
+After the maximum retry count is reached, the notification remains permanently `FAILED`.
+
 ## Running with Docker
 
 Clone the repository:
 
-git clone <repository-url>
-
+```bash
+git clone https://github.com/neerajsai2510/notification-platform.git
 cd notification-platform
+```
 
 Create the environment file:
 
+```bash
 cp .env.example .env
+```
 
 Start the application:
 
+```bash
 docker compose up --build
-Frontend:
-http://localhost:5173
+```
 
-FastAPI:
-http://localhost:8000
+Application URLs:
 
-Swagger:
-http://localhost:8000/docs
+- Frontend: http://localhost:5173
+- FastAPI: http://localhost:8000
+- Swagger: http://localhost:8000/docs
+
+Stop the application:
+
+```bash
 docker compose down
+```
+
 ## Testing
 
 Run:
 
+```bash
 pytest -v tests/
+```
+
 The test suite covers:
 
 - API endpoints
@@ -207,17 +246,29 @@ The test suite covers:
 - Retry behavior
 - Permanent failure handling
 - Exponential backoff
-Celery separates notification processing from the API request lifecycle.
-This prevents long-running delivery operations from blocking incoming
-requests.
-Redis is used as the Celery message broker and as the Pub/Sub mechanism
-for real-time notification status events.
-PostgreSQL provides durable storage for notifications and their processing
-state.
-WebSockets allow the dashboard to receive status updates immediately
-without continuously polling the backend.
-Docker Compose provides reproducible local infrastructure for the complete
-multi-service application.
+
+## Design Decisions
+
+### Celery
+
+Celery separates notification processing from the API request lifecycle. This prevents long-running delivery operations from blocking incoming requests.
+
+### Redis
+
+Redis is used as the Celery message broker and as the Pub/Sub mechanism for real-time notification status events.
+
+### PostgreSQL
+
+PostgreSQL provides durable storage for notifications and their processing state.
+
+### WebSockets
+
+WebSockets allow the dashboard to receive status updates immediately without continuously polling the backend.
+
+### Docker Compose
+
+Docker Compose provides reproducible local infrastructure for the complete multi-service application.
+
 ## Future Improvements
 
 - Integration with real SMS/email providers
