@@ -12,3 +12,4 @@ class Notification(Base):
     message = Column(Text, nullable=False)
     status = Column(String, default="PENDING")
     created_at = Column(DateTime, default=datetime.utcnow)
+    retry_count = Column(Integer, default=0)
